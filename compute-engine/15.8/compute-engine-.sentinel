@@ -1,0 +1,68 @@
+import "tfplan/v2" as tfplan
+import "strings"
+
+allComputeInstances = filter tfplan.resource_changes as _, resource_changes {
+	resource_changes.type is "google_compute_instance" and
+		resource_changes.mode is "managed" and
+		(resource_changes.change.actions contains "create" or
+			resource_changes.change.actions is ["update"])
+}
+
+allComputeInstanceTemplates = filter tfplan.resource_changes as _, resource_changes {
+	resource_changes.type is "google_compute_instance_template" and
+		resource_changes.mode is "managed" and
+		(resource_changes.change.actions contains "create" or
+			resource_changes.change.actions is ["update"])
+}
+
+print("Ensure 'Enable connecting to serial ports' is not enabled for VM Instance")
+
+deny_undefined_compute_instance_shielded_instance_config = rule {
+	all allComputeInstances as _, instances {
+		instances.change.after.shielded_instance_config is not null
+	}
+}
+
+deny_undefined_compute_instance_shield_vm_enable = rule when deny_undefined_compute_instance_shielded_instance_config is true {
+	all allComputeInstances as _, instances {
+		(keys(instances.change.after.shielded_instance_config[0]) contains "enable_vtpm" and
+		  keys(instances.change.after.shielded_instance_config[0])  contains "enable_integrity_monitoring")
+	}
+}
+
+deny_undefined_in_compute_instance_shielded_instance_config = rule when deny_undefined_compute_instance_shield_vm_enable is true {
+	all allComputeInstances as _, instance {
+		(instance.change.after.shielded_instance_config[0]["enable_vtpm"] is "true"  and 
+		 instance.change.after.shielded_instance_config[0]["enable_integrity_monitoring"] is "true")
+	}
+}
+
+deny_undefined_compute_instance_template_shielded_instance_config = rule {
+	all allComputeInstanceTemplates as _, templates {
+		(keys(templates.change.after.shielded_instance_config[0]) contains "enable_vtpm" and 
+		 keys(templates.change.after.shielded_instance_config[0]) contains "enable_integrity_monitoring")
+	}
+}
+
+deny_undefined_compute_instance_template_shield_vm_enable = rule when deny_undefined_compute_instance_template_shielded_instance_config is true {
+	all allComputeInstanceTemplates as _, templates {
+		(keys(templates.change.after.shielded_instance_config[0]) contains "enable_vtpm" and
+		 keys(templates.change.after.shielded_instance_config[0]) contains "enable_integrity_monitoring")
+	}
+}
+
+deny_undefined_in_compute_instance_template_shielded_instance_config = rule when deny_undefined_compute_instance_template_shield_vm_enable is true {
+	all allComputeInstanceTemplates as _, template {
+		(template.change.after.shielded_instance_config[0]["enable_vtpm"] is "true" and
+		 template.change.after.shielded_instance_config[0]["enable_integrity_monitoring"] is "true")
+	}
+}
+
+main = rule {
+	deny_undefined_compute_instance_shielded_instance_config and
+	deny_undefined_compute_instance_shield_vm_enable and
+	deny_undefined_in_compute_instance_shielded_instance_config and
+	deny_undefined_compute_instance_template_shielded_instance_config and
+	deny_undefined_compute_instance_template_shield_vm_enable and
+	deny_undefined_in_compute_instance_template_shielded_instance_config
+}

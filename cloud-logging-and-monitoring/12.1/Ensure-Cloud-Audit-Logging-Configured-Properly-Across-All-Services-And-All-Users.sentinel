@@ -1,0 +1,23 @@
+import "tfplan/v2" as tfplan
+
+auditLogConfig = tfplan.planned_values.resources["google_project_iam_audit_config.project"].values.audit_log_config
+
+print("Ensure All the Audit Log configuration is set correctly")
+
+deny_admin_read_audit_log_config = rule {
+	all auditLogConfig as _, config {
+		config is not null
+	}
+}
+
+deny_admin_read_audit_log_config = rule {
+	all auditLogConfig as _, config {
+		config["log_type"] contains 
+	}
+}
+
+
+# Main rule
+main = rule {
+   deny_admin_read_audit_log_config 
+}
